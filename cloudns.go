@@ -2,32 +2,41 @@ package cloudns
 
 import (
 	"github.com/caddyserver/caddy/v2"
-	libdnsClouDns "github.com/libdns/cloudns"
-
 	"github.com/caddyserver/caddy/v2/caddyconfig/caddyfile"
+	"github.com/libdns/cloudns"
+	"time"
 )
 
-// Provider lets Caddy read and manipulate DNS records hosted by this DNS provider.
-type Provider struct{ *libdnsClouDns.Provider }
+// Provider wraps the provider implementation as a Caddy module.
+type Provider struct {
+	*cloudns.Provider
+}
 
 func init() {
 	caddy.RegisterModule(Provider{})
 }
 
-// CaddyModule returns the Caddy module information for the DNS provider.
+// CaddyModule returns the Caddy module information.
 func (Provider) CaddyModule() caddy.ModuleInfo {
 	return caddy.ModuleInfo{
 		ID:  "dns.providers.cloudns",
-		New: func() caddy.Module { return &Provider{new(libdnsClouDns.Provider)} },
+		New: func() caddy.Module { return &Provider{new(cloudns.Provider)} },
 	}
 }
 
-// Provision prepares the Provider by replacing placeholders in authentication fields with their actual values.
+// Provision Before using the provider config, resolve placeholders in the API token.
+// Implements caddy.Provisioner.
 func (p *Provider) Provision(ctx caddy.Context) error {
 	replacer := caddy.NewReplacer()
 	p.Provider.AuthId = replacer.ReplaceAll(p.Provider.AuthId, "")
 	p.Provider.SubAuthId = replacer.ReplaceAll(p.Provider.SubAuthId, "")
 	p.Provider.AuthPassword = replacer.ReplaceAll(p.Provider.AuthPassword, "")
+
+	// Configure retry settings for the provider
+	p.Provider.OperationRetries = 5
+	p.Provider.InitialBackoff = 1 * time.Second
+	p.Provider.MaxBackoff = 30 * time.Second
+
 	return nil
 }
 
